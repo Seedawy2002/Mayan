@@ -8,8 +8,14 @@ import sys
 import os
 
 # Configuration
-PORT = int(os.environ.get("PROXY_PORT", 8075)) 
+PORT = int(os.environ.get("PROXY_PORT", 8075))
 TARGET_URL = os.environ.get("TARGET_URL", "http://mayan-app:8000")
+# DB config (match Mayan's) for TrashedDocumentDeletedInfo lookup
+DB_HOST = os.environ.get("DB_HOST", "localhost")
+DB_PORT = int(os.environ.get("DB_PORT", 5432))
+DB_NAME = os.environ.get("DB_NAME", "mayan")
+DB_USER = os.environ.get("DB_USER", "postgres")
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
 # Broad patterns to catch any internal Mayan URL
 TARGET_URLS = [
     TARGET_URL.rstrip('/'), 
@@ -26,6 +32,30 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)]
 )
 logger = logging.getLogger("MayanProxy")
+
+
+def _get_document_id_for_event(event_id):
+    """Look up document_id from TrashedDocumentDeletedInfo by event_id. Returns str or None."""
+    if event_id is None:
+        return None
+    try:
+        import psycopg2
+        conn = psycopg2.connect(
+            host=DB_HOST, port=DB_PORT, dbname=DB_NAME, user=DB_USER, password=DB_PASSWORD
+        )
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT document_id FROM events_document_id_fix_trasheddocumentdeletedinfo WHERE event_id = %s LIMIT 1",
+            (int(event_id),),
+        )
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        return str(row[0]) if row else None
+    except Exception as e:
+        logger.debug("DB lookup failed for event %s: %s", event_id, e)
+        return None
+
 
 class MayanProxyHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
@@ -183,9 +213,13 @@ class MayanProxyHandler(http.server.BaseHTTPRequestHandler):
                         # target_object_id IS the document id when target is Document
                         target['document_id'] = str(obj_id)
                         changed = True
-                    # When model is 'documenttype', target_object_id is the document TYPE id, NOT the
-                    # deleted document id. Do NOT overwrite - leave document_id from Mayan's
-                    # events_document_id_fix (TrashedDocumentDeletedInfo) which has the real value.
+                    elif model == 'documenttype':
+                        # target_object_id is the document TYPE id (e.g. "1"), NOT the deleted doc id.
+                        # Look up real document_id from TrashedDocumentDeletedInfo by event_id.
+                        event_id = data.get('id')
+                        doc_id = _get_document_id_for_event(event_id)
+                        target['document_id'] = doc_id
+                        changed = True
             
             # Fix 'actor'
             actor = data.get('actor')

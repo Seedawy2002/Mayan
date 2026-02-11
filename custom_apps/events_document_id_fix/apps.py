@@ -294,40 +294,26 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
         self._patch_event_commit()
 
     def _patch_trashed_document_task(self):
-        """Use Celery task_prerun to save document info BEFORE task_trashed_document_delete runs."""
+        """Patch views that trigger delete - save document info before task is queued."""
         import logging
-        from django.apps import apps
         from django.utils import timezone
 
         logger = logging.getLogger('events_document_id_fix')
 
-        try:
-            from celery.signals import task_prerun
-        except ImportError:
-            logger.warning('Could not import celery.signals, skipping task patch')
-            return
-
-        # Match by kwargs (trashed_document_id) - more reliable than sender which can vary
-        def on_task_prerun(sender=None, kwargs=None, **rest):
-            if kwargs is None:
-                return
-            doc_id = kwargs.get('trashed_document_id')
-            if doc_id is None:
-                return
+        def save_doc_info(trashed_document):
             try:
-                TrashedDocument = apps.get_model(app_label='documents', model_name='TrashedDocument')
-                doc = TrashedDocument.objects.filter(pk=doc_id).first()
-                if doc is None:
-                    return
                 from events_document_id_fix.models import TrashedDocumentDeletedInfo
-                doc_type_id = getattr(doc, 'document_type_id', None) or (
-                    getattr(getattr(doc, 'document_type', None), 'pk', None)
+                doc_type_id = getattr(trashed_document, 'document_type_id', None) or (
+                    getattr(getattr(trashed_document, 'document_type', None), 'pk', None)
                 )
                 if doc_type_id is None:
                     return
-                label = getattr(doc, 'label', None) or str(doc_id)
+                doc_pk = getattr(trashed_document, 'pk', None)
+                if doc_pk is None:
+                    return
+                label = getattr(trashed_document, 'label', None) or str(doc_pk)
                 TrashedDocumentDeletedInfo.objects.get_or_create(
-                    document_id=str(doc_id),
+                    document_id=str(doc_pk),
                     defaults={
                         'document_type_id': int(doc_type_id),
                         'deleted_at': timezone.now(),
@@ -335,12 +321,39 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
                         'event_id': None,
                     }
                 )
-                logger.info('TrashedDocumentDeletedInfo SAVED via task_prerun: document_id=%s', doc_id)
+                logger.info('TrashedDocumentDeletedInfo SAVED: document_id=%s', doc_pk)
             except Exception as e:
-                logger.exception('task_prerun save failed: %s', e)
+                logger.exception('Save failed: %s', e)
 
-        task_prerun.connect(on_task_prerun, weak=False)
-        logger.info('Connected task_prerun for trashed_document_delete (via kwargs)')
+        # Patch API view (DELETE /api/.../trashed-documents/{id}/)
+        try:
+            from mayan.apps.documents.api_views.trashed_document_api_views import APITrashedDocumentDetailView
+            _orig_destroy = APITrashedDocumentDetailView.destroy
+
+            def patched_destroy(self, request, *args, **kwargs):
+                instance = self.get_object()
+                save_doc_info(instance)
+                return _orig_destroy(self, request, *args, **kwargs)
+
+            APITrashedDocumentDetailView.destroy = patched_destroy
+            logger.info('Patched APITrashedDocumentDetailView.destroy')
+        except Exception as e:
+            logger.warning('Could not patch API view: %s', e)
+
+        # Patch web view (TrashedDocumentDeleteView)
+        try:
+            from mayan.apps.documents.views.trashed_document_views import TrashedDocumentDeleteView
+            _orig_object_action = TrashedDocumentDeleteView.object_action
+
+            def patched_object_action(self, form, instance):
+                save_doc_info(instance)
+                return _orig_object_action(self, form, instance)
+
+            TrashedDocumentDeleteView.object_action = patched_object_action
+            logger.info('Patched TrashedDocumentDeleteView.object_action')
+        except Exception as e:
+            logger.warning('Could not patch web view: %s', e)
+
 
     def _patch_event_commit(self):
         """Patch event_trashed_document_deleted.commit to save document_id from caller's self."""

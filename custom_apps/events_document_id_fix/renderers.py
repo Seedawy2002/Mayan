@@ -64,10 +64,18 @@ def _fix_event_item(item):
         _inject_document_id_for_trashed_deleted(item, fix)
         item['target'] = fix
         changed = True
-    elif isinstance(target, dict) and 'document_id' not in target:
-        # Target already a dict (e.g. from serializer) but missing document_id; inject it.
-        _inject_document_id_for_trashed_deleted(item, target)
-        changed = True
+    elif isinstance(target, dict):
+        # Target is a dict. When target is DocumentType, document_id must come from
+        # TrashedDocumentDeletedInfo; never use target_object_id (that's the doc type id).
+        # If document_id equals id or is missing, we must overwrite for documenttype.
+        target_model = _target_content_type_model(item)
+        need_inject = (
+            'document_id' not in target
+            or (target_model == 'documenttype' and str(target.get('document_id', '')) == str(target.get('id', '')))
+        )
+        if need_inject:
+            _inject_document_id_for_trashed_deleted(item, target)
+            changed = True
     # Fix actor (only for trashed_document_deleted)
     actor = item.get('actor')
     if isinstance(actor, str) and actor.startswith(UNABLE_PREFIX):

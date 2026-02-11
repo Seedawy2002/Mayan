@@ -65,6 +65,28 @@ services:
     networks:
       - mayan_network
 
+  mayan-proxy:
+    image: python:3.11-slim
+    container_name: mayan-proxy
+    depends_on:
+      - mayan-app
+    environment:
+      - PROXY_PORT=8075
+      - TARGET_URL=http://mayan-app:8000
+      - DB_HOST=postgresql
+      - DB_PORT=5432
+      - DB_NAME=mayan
+      - DB_USER=postgres
+      - DB_PASSWORD=@edDGA6QCID9K$$22
+    command: ["sh", "-c", "pip install -q psycopg2-binary requests && python /proxy/mayan_proxy.py"]
+    volumes:
+      - ./mayan_proxy.py:/proxy/mayan_proxy.py
+    ports:
+      - "8075:8075"
+    restart: unless-stopped
+    networks:
+      - mayan_network
+
 networks:
   mayan_network:
     driver: bridge
