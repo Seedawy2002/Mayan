@@ -234,28 +234,6 @@ class MayanProxyHandler(http.server.BaseHTTPRequestHandler):
                         changed = True
                         logger.warning(f"Event {event_id}: Could not find document_id in DB for doc_type={obj_id}")
                 
-                # Fix 'actor' if needed
-                actor = data.get('actor')
-                if isinstance(actor, str) and "Unable to find serializer" in actor:
-                    actor_id = data.get('actor_object_id')
-                    data['actor'] = {'id': int(actor_id) if actor_id is not None else None}
-                    changed = True
-            else:
-                # For non-trashed_document_deleted events, still fix "Unable to find serializer" errors
-                target = data.get('target')
-                is_unable = isinstance(target, str) and "Unable to find serializer" in target
-                
-                if is_unable:
-                    obj_id = data.get('target_object_id')
-                    data['target'] = {'id': int(obj_id) if obj_id is not None else None}
-                    changed = True
-                
-                actor = data.get('actor')
-                if isinstance(actor, str) and "Unable to find serializer" in actor:
-                    obj_id = data.get('actor_object_id')
-                    data['actor'] = {'id': int(obj_id) if obj_id is not None else None}
-                    changed = True
-                
         return changed
 
 if __name__ == "__main__":

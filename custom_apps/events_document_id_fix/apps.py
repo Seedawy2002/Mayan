@@ -85,10 +85,6 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
             verb_id = verb if isinstance(verb, str) else getattr(verb, 'id', None)
             if verb_id != 'documents.trashed_document_deleted':
                 return result  # Only edit trashed_document_deleted events
-            field_name = getattr(self, 'field_name', None) or getattr(self, '_field_name', None)
-            if field_name == 'actor':
-                obj_id = getattr(instance, 'actor_object_id', None)
-                return {'id': int(obj_id) if obj_id is not None else None}
             if field_name == 'target':
                 obj_id = getattr(instance, 'target_object_id', None)
                 fix = {'id': int(obj_id) if obj_id is not None else None}
