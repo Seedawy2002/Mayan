@@ -19,14 +19,14 @@ def get_document_id_for_event_item(event_item):
         return None
     # Target is Document -> target_object_id is the document pk.
     if target_model == 'document':
-        return str(target_id)
+        return int(target_id)
     # Target is DocumentType -> use dedicated table (look up by event_id first, then timestamp).
     if target_model == 'documenttype':
         event_id = event_item.get('id')
         if event_id is not None:
             row = _trashed_by_event_id(event_id)
             if row is not None:
-                return str(row.document_id)
+                return int(row.document_id)
         created_raw = event_item.get('created') or event_item.get('timestamp')
         if not created_raw:
             return _trashed_latest(int(target_id))
@@ -73,7 +73,7 @@ def _trashed_latest(document_type_id):
     row = TrashedDocumentDeletedInfo.objects.filter(
         document_type_id=document_type_id,
     ).order_by('-deleted_at').first()
-    return str(row.document_id) if row else None
+    return int(row.document_id) if row else None
 
 
 def _trashed_at_time(document_type_id, event_created):
@@ -82,4 +82,4 @@ def _trashed_at_time(document_type_id, event_created):
         document_type_id=document_type_id,
         deleted_at__lte=event_created,
     ).order_by('-deleted_at').first()
-    return str(row.document_id) if row else None
+    return int(row.document_id) if row else None

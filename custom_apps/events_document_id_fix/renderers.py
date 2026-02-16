@@ -46,9 +46,12 @@ def _inject_document_id_for_trashed_deleted(item, fix):
             doc_id = _get_document_id_resolver(item)
         except Exception:
             pass
-    if doc_id is None and _target_content_type_model(item) == 'document':
+    model = _target_content_type_model(item)
+    if doc_id is None and model == 'document':
         doc_id = fix.get('id')
-    fix['document_id'] = str(doc_id) if doc_id is not None else None
+    fix['document_id'] = int(doc_id) if doc_id is not None else None
+    if model == 'documenttype':
+        fix['document_type_id'] = int(fix.get('id')) if fix.get('id') is not None else None
 
 
 def _fix_event_item(item):
@@ -60,7 +63,7 @@ def _fix_event_item(item):
     target = item.get('target')
     if isinstance(target, str) and target.startswith(UNABLE_PREFIX):
         target_id = item.get('target_object_id')
-        fix = {'id': str(target_id) if target_id is not None else None}
+        fix = {'id': int(target_id) if target_id is not None else None}
         _inject_document_id_for_trashed_deleted(item, fix)
         item['target'] = fix
         changed = True
@@ -80,7 +83,7 @@ def _fix_event_item(item):
     actor = item.get('actor')
     if isinstance(actor, str) and actor.startswith(UNABLE_PREFIX):
         actor_id = item.get('actor_object_id')
-        item['actor'] = {'id': str(actor_id) if actor_id is not None else None}
+        item['actor'] = {'id': int(actor_id) if actor_id is not None else None}
         changed = True
     return changed
 

@@ -16,7 +16,7 @@ class EventTargetField(DynamicSerializerField):
     def _target_id_result(self, action):
         """Build target dict from event and TrashedDocumentDeletedInfo (true document_id)."""
         target_id = getattr(action, 'target_object_id', None) if action else None
-        result = {'id': str(target_id) if target_id is not None else None}
+        result = {'id': int(target_id) if target_id is not None else None}
         event_created = (getattr(action, 'timestamp', None) or getattr(action, 'created', None)) if action else None
         target_model = None
         if action and getattr(action, 'target_content_type', None):
@@ -28,6 +28,7 @@ class EventTargetField(DynamicSerializerField):
             return result
         # Target is DocumentType -> look up TrashedDocumentDeletedInfo (linked by event_id or timestamp).
         if target_model == 'documenttype' and target_id is not None:
+            result['document_type_id'] = int(target_id)
             try:
                 from events_document_id_fix.models import TrashedDocumentDeletedInfo
                 event_id = getattr(action, 'pk', None) or getattr(action, 'id', None)
@@ -45,7 +46,7 @@ class EventTargetField(DynamicSerializerField):
                             document_type_id=doc_type_id,
                         ).order_by('-deleted_at').first()
                 if row:
-                    result['document_id'] = str(row.document_id)
+                    result['document_id'] = int(row.document_id)
                     if row.label:
                         result['label'] = row.label
                 else:

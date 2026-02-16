@@ -47,9 +47,9 @@ services:
       MAYAN_ALLOWED_HOSTS: "['localhost', '127.0.0.1', '*']"
       MAYAN_CSRF_TRUSTED_ORIGINS: "['http://localhost:8070', 'http://127.0.0.1:8070']"
       # --- CUSTOM APP SETTINGS ---
+      PYTHONUNBUFFERED: "1"
       PYTHONPATH: "/var/lib/mayan"
-      MAYAN_COMMON_EXTRA_APPS: |
-        - events_document_id_fix
+      MAYAN_SETTINGS_MODULE: "local_settings"
       # ---------------------------
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8070/ || exit 1"]
@@ -61,6 +61,7 @@ services:
     volumes:
       - mayan_app:/var/lib/mayan
       - ./custom_apps/events_document_id_fix:/var/lib/mayan/events_document_id_fix
+      - ./local_settings.py:/var/lib/mayan/local_settings.py
     restart: unless-stopped
     networks:
       - mayan_network

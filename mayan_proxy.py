@@ -191,42 +191,74 @@ class MayanProxyHandler(http.server.BaseHTTPRequestHandler):
 
         # 2. Specific Event Fixes (only for dicts that look like events)
         if isinstance(data, dict) and 'verb' in data:
-            # Fix 'target'
-            target = data.get('target')
-            is_unable = isinstance(target, str) and "Unable to find serializer" in target
+            # Check for trashed_document_deleted event
+            verb = data.get('verb', {})
+            verb_id = verb.get('id') if isinstance(verb, dict) else str(verb)
             
-            if is_unable or isinstance(target, dict):
+            if "trashed_document_deleted" in verb_id:
+                # Fix 'target' field
+                target = data.get('target')
+                is_unable = isinstance(target, str) and "Unable to find serializer" in target
                 obj_id = data.get('target_object_id')
-                if is_unable:
-                    data['target'] = {'id': str(obj_id) if obj_id is not None else None}
+                
+                # Always create/update target dict for trashed_document_deleted
+                if is_unable or not isinstance(target, dict):
+                    data['target'] = {'id': int(obj_id) if obj_id is not None else None}
                     target = data['target']
                     changed = True
+                    logger.debug(f"Fixed 'Unable to find serializer' for event {data.get('id')}")
+                else:
+                    target = data['target']
                 
-                # Check for trashed_document_deleted to inject document_id
-                verb = data.get('verb', {})
-                verb_id = verb.get('id') if isinstance(verb, dict) else str(verb)
+                # Determine document_id based on target content type
+                target_ct = data.get('target_content_type', {})
+                model = target_ct.get('model') if isinstance(target_ct, dict) else None
                 
-                if "trashed_document_deleted" in verb_id:
-                    target_ct = data.get('target_content_type', {})
-                    model = target_ct.get('model') if isinstance(target_ct, dict) else None
-                    if model == 'document':
-                        # target_object_id IS the document id when target is Document
-                        target['document_id'] = str(obj_id)
+                if model == 'document':
+                    # target_object_id IS the document id when target is Document
+                    if target.get('document_id') != (int(obj_id) if obj_id is not None else None):
+                        target['document_id'] = int(obj_id) if obj_id is not None else None
                         changed = True
-                    elif model == 'documenttype':
-                        # target_object_id is the document TYPE id (e.g. "1"), NOT the deleted doc id.
-                        # Look up real document_id from TrashedDocumentDeletedInfo by event_id.
-                        event_id = data.get('id')
-                        doc_id = _get_document_id_for_event(event_id)
-                        target['document_id'] = doc_id
+                        logger.info(f"Event {data.get('id')}: Set document_id={obj_id} (from Document target)")
+                        
+                elif model == 'documenttype':
+                    # target_object_id is the document TYPE id, NOT the deleted doc id
+                    # Look up real document_id from TrashedDocumentDeletedInfo by event_id
+                    event_id = data.get('id')
+                    doc_id = _get_document_id_for_event(event_id)
+                    
+                    if doc_id:
+                        target['document_id'] = int(doc_id)
+                        target['document_type_id'] = int(obj_id) if obj_id is not None else None
                         changed = True
-            
-            # Fix 'actor'
-            actor = data.get('actor')
-            if isinstance(actor, str) and "Unable to find serializer" in actor:
-                obj_id = data.get('actor_object_id')
-                data['actor'] = {'id': str(obj_id) if obj_id is not None else None}
-                changed = True
+                        logger.info(f"Event {event_id}: Set document_id={doc_id} (from DB lookup, doc_type={obj_id})")
+                    else:
+                        target['document_id'] = None
+                        target['document_type_id'] = int(obj_id) if obj_id is not None else None
+                        changed = True
+                        logger.warning(f"Event {event_id}: Could not find document_id in DB for doc_type={obj_id}")
+                
+                # Fix 'actor' if needed
+                actor = data.get('actor')
+                if isinstance(actor, str) and "Unable to find serializer" in actor:
+                    actor_id = data.get('actor_object_id')
+                    data['actor'] = {'id': str(actor_id) if actor_id is not None else None}
+                    changed = True
+            else:
+                # For non-trashed_document_deleted events, still fix "Unable to find serializer" errors
+                target = data.get('target')
+                is_unable = isinstance(target, str) and "Unable to find serializer" in target
+                
+                if is_unable:
+                    obj_id = data.get('target_object_id')
+                    data['target'] = {'id': str(obj_id) if obj_id is not None else None}
+                    changed = True
+                
+                actor = data.get('actor')
+                if isinstance(actor, str) and "Unable to find serializer" in actor:
+                    obj_id = data.get('actor_object_id')
+                    data['actor'] = {'id': str(obj_id) if obj_id is not None else None}
+                    changed = True
                 
         return changed
 

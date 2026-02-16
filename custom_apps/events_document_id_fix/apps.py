@@ -1,9 +1,8 @@
 from django.utils.translation import gettext_lazy as _
 from mayan.apps.common.apps import MayanAppConfig
 
-
 class EventsDocumentIdFixConfig(MayanAppConfig):
-    has_rest_api = True
+    has_rest_api = False
     has_tests = False
     name = 'events_document_id_fix'
     verbose_name = _('Events document ID fix')
@@ -78,16 +77,17 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
             field_name = getattr(self, 'field_name', None) or getattr(self, '_field_name', None)
             if field_name == 'actor':
                 obj_id = getattr(instance, 'actor_object_id', None)
-                return {'id': str(obj_id) if obj_id is not None else None}
+                return {'id': int(obj_id) if obj_id is not None else None}
             if field_name == 'target':
                 obj_id = getattr(instance, 'target_object_id', None)
-                fix = {'id': str(obj_id) if obj_id is not None else None}
+                fix = {'id': int(obj_id) if obj_id is not None else None}
                 target_model = getattr(getattr(instance, 'target_content_type', None), 'model', None)
                 if target_model == 'document':
                     fix['document_id'] = fix['id']
                 elif target_model == 'documenttype' and obj_id is not None:
                     doc_id = resolve_doc_id(instance, obj_id)
-                    fix['document_id'] = str(doc_id) if doc_id is not None else None
+                    fix['document_id'] = int(doc_id) if doc_id is not None else None
+                    fix['document_type_id'] = fix['id']
                 return fix
             return result
 
@@ -95,10 +95,13 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
 
     def _patch_events_serializer(self):
         """Patch base EventSerializer.target so deleted targets always return id (and saved metadata)."""
-        from mayan.apps.events import serializers as events_serializers
+        try:
+            from mayan.apps.events.serializers import event_serializers
+        except ImportError:
+            return
         from events_document_id_fix.serializers import EventTargetField
 
-        EventSerializer = events_serializers.EventSerializer
+        EventSerializer = event_serializers.EventSerializer
         custom_target = EventTargetField(read_only=True)
 
         # DRF builds _declared_fields at class definition; assign both so instances use our field.
@@ -109,7 +112,7 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
     def _patch_events_views_renderer(self):
         """Use our renderer on events API views so response is fixed before sending."""
         try:
-            from mayan.apps.events import api_views as events_api_views
+            from mayan.apps.events.api_views import event_api_views as events_api_views
             from events_document_id_fix.renderers import EventsJSONRenderer
         except ImportError:
             return
@@ -124,7 +127,7 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
     def _patch_events_views_response(self):
         """Wrap events view list/get so we fix response.data before return (guaranteed to run)."""
         try:
-            from mayan.apps.events import api_views as events_api_views
+            from mayan.apps.events.api_views import event_api_views as events_api_views
             from events_document_id_fix.renderers import fix_events_target_in_data
         except ImportError:
             return
@@ -212,6 +215,13 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
         except ImportError:
             return
 
+        def _emergency_log(msg):
+            try:
+                with open('/var/lib/mayan/emergency.log', 'a') as f:
+                    f.write(f"[{timezone.now().isoformat()}] {msg}\n")
+            except:
+                pass
+
         def save_trashed_document_info(document_instance):
             """Create TrashedDocumentDeletedInfo row for this document (called from pre_delete and delete() patch)."""
             try:
@@ -221,14 +231,9 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
                     getattr(getattr(document_instance, 'document_type', None), 'pk', None)
                 )
                 if doc_type_id is None:
-                    logger.warning(
-                        'TrashedDocumentDeletedInfo SKIP: document pk=%s has no document_type_id',
-                        getattr(document_instance, 'pk', None)
-                    )
                     return
                 doc_pk = getattr(document_instance, 'pk', None)
                 if doc_pk is None:
-                    logger.warning('TrashedDocumentDeletedInfo SKIP: document has no pk')
                     return
                 label = getattr(document_instance, 'label', None) or str(doc_pk)
                 # get_or_create avoids duplicate when both pre_delete and delete() patch run
@@ -241,15 +246,8 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
                         'event_id': None,
                     }
                 )
-                logger.info(
-                    'TrashedDocumentDeletedInfo SAVED: document_id=%s document_type_id=%s label=%s',
-                    doc_pk, doc_type_id, (label[:50] if label else '')
-                )
-            except Exception as e:
-                logger.exception(
-                    'TrashedDocumentDeletedInfo create failed for document pk=%s: %s',
-                    getattr(document_instance, 'pk', None), e
-                )
+            except Exception:
+                pass
 
         def on_pre_delete(sender, instance, **kwargs):
             logger.debug('pre_delete fired: sender=%s instance.pk=%s', sender.__name__, getattr(instance, 'pk', None))
@@ -270,8 +268,10 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
             pre_delete.connect(on_pre_delete, sender=TrashedDocument, weak=False)
             post_delete.connect(on_post_delete, sender=TrashedDocument, weak=False)
             logger.info('Connected pre_delete and post_delete to Document and TrashedDocument')
+            print("   -> Signals connected to TrashedDocument ✅", flush=True)
         except ImportError:
             logger.warning('TrashedDocument not found, only Document signals connected')
+            print("   -> TrashedDocument model not found! ⚠️", flush=True)
 
         # Also patch Document.delete() so we capture when code calls document.delete()
         # (in case pre_delete doesn't run in some process, e.g. bulk path or worker)
@@ -419,9 +419,8 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
                                 'event_id': None,
                             }
                         )
-                        logger.info('TrashedDocumentDeletedInfo SAVED via commit patch: document_id=%s', doc_id)
-                    except Exception as e:
-                        logger.exception('TrashedDocumentDeletedInfo commit patch failed: %s', e)
+                    except Exception:
+                        pass
             return _original_commit(self, action_object=action_object, actor=actor, target=target)
 
         EventType.commit = patched_commit
@@ -472,9 +471,5 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
             if row:
                 row.event_id = event_id
                 row.save(update_fields=['event_id'])
-                import logging
-                logging.getLogger('events_document_id_fix').info(
-                    'Linked TrashedDocumentDeletedInfo id=%s to event_id=%s', row.pk, event_id
-                )
-
+            # signals end
         post_save.connect(on_action_saved, sender=Action, weak=False)
