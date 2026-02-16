@@ -16,13 +16,9 @@ DB_PORT = int(os.environ.get("DB_PORT", 5432))
 DB_NAME = os.environ.get("DB_NAME", "mayan")
 DB_USER = os.environ.get("DB_USER", "postgres")
 DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
-# Broad patterns to catch any internal Mayan URL
 TARGET_URLS = [
     TARGET_URL.rstrip('/'), 
     "http://mayan-app:8000", 
-    "http://localhost:8000",
-    "http://localhost:8070",
-    "http://127.0.0.1:8000",
 ]
 
 # Setup logging
@@ -242,7 +238,7 @@ class MayanProxyHandler(http.server.BaseHTTPRequestHandler):
                 actor = data.get('actor')
                 if isinstance(actor, str) and "Unable to find serializer" in actor:
                     actor_id = data.get('actor_object_id')
-                    data['actor'] = {'id': str(actor_id) if actor_id is not None else None}
+                    data['actor'] = {'id': int(actor_id) if actor_id is not None else None}
                     changed = True
             else:
                 # For non-trashed_document_deleted events, still fix "Unable to find serializer" errors
@@ -251,13 +247,13 @@ class MayanProxyHandler(http.server.BaseHTTPRequestHandler):
                 
                 if is_unable:
                     obj_id = data.get('target_object_id')
-                    data['target'] = {'id': str(obj_id) if obj_id is not None else None}
+                    data['target'] = {'id': int(obj_id) if obj_id is not None else None}
                     changed = True
                 
                 actor = data.get('actor')
                 if isinstance(actor, str) and "Unable to find serializer" in actor:
                     obj_id = data.get('actor_object_id')
-                    data['actor'] = {'id': str(obj_id) if obj_id is not None else None}
+                    data['actor'] = {'id': int(obj_id) if obj_id is not None else None}
                     changed = True
                 
         return changed
