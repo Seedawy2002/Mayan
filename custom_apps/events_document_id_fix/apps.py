@@ -93,8 +93,9 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
                     fix['document_id'] = fix['id']
                 elif target_model == 'documenttype' and obj_id is not None:
                     doc_id = resolve_doc_id(instance, obj_id)
+                    fix['id'] = int(doc_id) if doc_id is not None else fix['id']
                     fix['document_id'] = int(doc_id) if doc_id is not None else None
-                    fix['document_type_id'] = fix['id']
+                    fix['document_type_id'] = int(obj_id) if obj_id is not None else None
                 return fix
             return result
 

@@ -224,10 +224,11 @@ class MayanProxyHandler(http.server.BaseHTTPRequestHandler):
                     doc_id = _get_document_id_for_event(event_id)
                     
                     if doc_id:
+                        target['id'] = int(doc_id)
                         target['document_id'] = int(doc_id)
                         target['document_type_id'] = int(obj_id) if obj_id is not None else None
                         changed = True
-                        logger.info(f"Event {event_id}: Set document_id={doc_id} (from DB lookup, doc_type={obj_id})")
+                        logger.info(f"Event {event_id}: Set id={doc_id} and document_id={doc_id} (from DB lookup, doc_type={obj_id})")
                     else:
                         target['document_id'] = None
                         target['document_type_id'] = int(obj_id) if obj_id is not None else None

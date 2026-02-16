@@ -46,6 +46,7 @@ class EventTargetField(DynamicSerializerField):
                             document_type_id=doc_type_id,
                         ).order_by('-deleted_at').first()
                 if row:
+                    result['id'] = int(row.document_id)
                     result['document_id'] = int(row.document_id)
                     if row.label:
                         result['label'] = row.label
