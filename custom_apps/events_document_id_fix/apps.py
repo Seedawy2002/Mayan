@@ -71,6 +71,15 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
         original_to_representation = rest_api_fields.DynamicSerializerField.to_representation
         resolve_doc_id = self._resolve_doc_id_for_documenttype_target
 
+        def _get_doc_type_label(doc_type_id):
+            if doc_type_id is None:
+                return None
+            try:
+                from mayan.apps.documents.models import DocumentType
+                return DocumentType.objects.filter(pk=int(doc_type_id)).values_list('label', flat=True).first() or None
+            except Exception:
+                return None
+
         def patched_to_representation(self, value):
             result = original_to_representation(self, value)
             if not isinstance(result, str) or not result.startswith('Unable to find serializer'):
@@ -85,17 +94,33 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
             verb_id = verb if isinstance(verb, str) else getattr(verb, 'id', None)
             if verb_id != 'documents.trashed_document_deleted':
                 return result  # Only edit trashed_document_deleted events
+            field_name = getattr(self, 'field_name', None)
             if field_name == 'target':
                 obj_id = getattr(instance, 'target_object_id', None)
                 fix = {'id': int(obj_id) if obj_id is not None else None}
                 target_model = getattr(getattr(instance, 'target_content_type', None), 'model', None)
                 if target_model == 'document':
                     fix['document_id'] = fix['id']
+                    doc_type_label = None
+                    if fix.get('id'):
+                        try:
+                            from mayan.apps.documents.models import Document
+                            dt_id = Document.objects.filter(pk=fix['id']).values_list('document_type_id', flat=True).first()
+                            if dt_id is None:
+                                from mayan.apps.documents.models import TrashedDocument
+                                dt_id = TrashedDocument.objects.filter(pk=fix['id']).values_list('document_type_id', flat=True).first()
+                            doc_type_label = _get_doc_type_label(dt_id)
+                        except Exception:
+                            pass
+                    if doc_type_label is not None:
+                        fix['document_type'] = {'id': int(dt_id), 'label': doc_type_label}
                 elif target_model == 'documenttype' and obj_id is not None:
                     doc_id = resolve_doc_id(instance, obj_id)
                     fix['id'] = int(doc_id) if doc_id is not None else fix['id']
                     fix['document_id'] = int(doc_id) if doc_id is not None else None
-                    fix['document_type_id'] = int(obj_id) if obj_id is not None else None
+                    doc_type_label = _get_doc_type_label(obj_id)
+                    if doc_type_label is not None:
+                        fix['document_type'] = {'id': int(obj_id), 'label': doc_type_label}
                 return fix
             return result
 

@@ -6,6 +6,44 @@ instead of "Unable to find serializer class for: ...".
 from mayan.apps.rest_api.fields import DynamicSerializerField
 
 
+def _get_document_type_label(doc_type_id):
+    """Look up DocumentType label by id. Returns str or None."""
+    if doc_type_id is None:
+        return None
+    try:
+        from mayan.apps.documents.models import DocumentType
+        label = DocumentType.objects.filter(pk=int(doc_type_id)).values_list('label', flat=True).first()
+        return label or None
+    except Exception:
+        return None
+
+
+def _get_document_type_id_from_document(doc_id):
+    """Look up document_type_id from Document or TrashedDocument by document id. Returns int or None."""
+    if doc_id is None:
+        return None
+    try:
+        from mayan.apps.documents.models import Document
+        doc_type_id = Document.objects.filter(pk=doc_id).values_list('document_type_id', flat=True).first()
+        if doc_type_id is not None:
+            return int(doc_type_id)
+        try:
+            from mayan.apps.documents.models import TrashedDocument
+            doc_type_id = TrashedDocument.objects.filter(pk=doc_id).values_list('document_type_id', flat=True).first()
+            return int(doc_type_id) if doc_type_id is not None else None
+        except Exception:
+            pass
+        return None
+    except Exception:
+        return None
+
+
+def _get_document_type_label_from_document(doc_id):
+    """Look up document_type label from Document or TrashedDocument by document id. Returns str or None."""
+    doc_type_id = _get_document_type_id_from_document(doc_id)
+    return _get_document_type_label(doc_type_id) if doc_type_id is not None else None
+
+
 class EventTargetField(DynamicSerializerField):
     """
     Target field that, for deleted or missing targets (e.g. trashed_document_deleted),
@@ -25,10 +63,18 @@ class EventTargetField(DynamicSerializerField):
         # Target is Document -> target_object_id is document_id.
         if target_model == 'document':
             result['document_id'] = result['id']
+            # Add document_type for extraction: document_data.get('document_type', {}).get('label')
+            doc_type_id = _get_document_type_id_from_document(result['id'])
+            doc_type_label = _get_document_type_label(doc_type_id) if doc_type_id else None
+            if doc_type_id is not None and doc_type_label is not None:
+                result['document_type'] = {'id': doc_type_id, 'label': doc_type_label}
             return result
         # Target is DocumentType -> look up TrashedDocumentDeletedInfo (linked by event_id or timestamp).
         if target_model == 'documenttype' and target_id is not None:
-            result['document_type_id'] = int(target_id)
+            # Add document_type for extraction: document_data.get('document_type', {}).get('label')
+            doc_type_label = _get_document_type_label(target_id)
+            if doc_type_label is not None:
+                result['document_type'] = {'id': int(target_id), 'label': doc_type_label}
             try:
                 from events_document_id_fix.models import TrashedDocumentDeletedInfo
                 event_id = getattr(action, 'pk', None) or getattr(action, 'id', None)

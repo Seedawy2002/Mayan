@@ -53,6 +53,58 @@ def _get_document_id_for_event(event_id):
         return None
 
 
+def _get_document_type_label(doc_type_id):
+    """Look up DocumentType label by id from documents_documenttype. Returns str or None."""
+    if doc_type_id is None:
+        return None
+    try:
+        import psycopg2
+        conn = psycopg2.connect(
+            host=DB_HOST, port=DB_PORT, dbname=DB_NAME, user=DB_USER, password=DB_PASSWORD
+        )
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT label FROM documents_documenttype WHERE id = %s LIMIT 1",
+            (int(doc_type_id),),
+        )
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        return str(row[0]) if row else None
+    except Exception as e:
+        logger.debug("DB lookup failed for document_type %s: %s", doc_type_id, e)
+        return None
+
+
+def _get_document_type_id_from_document(doc_id):
+    """Look up document_type_id from documents_document or documents_trasheddocument. Returns int or None."""
+    if doc_id is None:
+        return None
+    try:
+        import psycopg2
+        conn = psycopg2.connect(
+            host=DB_HOST, port=DB_PORT, dbname=DB_NAME, user=DB_USER, password=DB_PASSWORD
+        )
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT document_type_id FROM documents_document WHERE id = %s LIMIT 1",
+            (int(doc_id),),
+        )
+        row = cur.fetchone()
+        if row is None:
+            cur.execute(
+                "SELECT document_type_id FROM documents_trasheddocument WHERE id = %s LIMIT 1",
+                (int(doc_id),),
+            )
+            row = cur.fetchone()
+        cur.close()
+        conn.close()
+        return int(row[0]) if row else None
+    except Exception as e:
+        logger.debug("DB lookup failed for document %s: %s", doc_id, e)
+        return None
+
+
 class MayanProxyHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         # Suppress default http.server logging to use our own
@@ -216,7 +268,14 @@ class MayanProxyHandler(http.server.BaseHTTPRequestHandler):
                         target['document_id'] = int(obj_id) if obj_id is not None else None
                         changed = True
                         logger.info(f"Event {data.get('id')}: Set document_id={obj_id} (from Document target)")
-                        
+                    # Add document_type for extraction: document_data.get('document_type', {}).get('label')
+                    if 'document_type' not in target or not isinstance(target.get('document_type'), dict):
+                        doc_type_id = _get_document_type_id_from_document(obj_id)
+                        doc_type_label = _get_document_type_label(doc_type_id)
+                        if doc_type_label is not None:
+                            target['document_type'] = {'id': int(doc_type_id), 'label': doc_type_label}
+                            changed = True
+
                 elif model == 'documenttype':
                     # target_object_id is the document TYPE id, NOT the deleted doc id
                     # Look up real document_id from TrashedDocumentDeletedInfo by event_id
@@ -226,14 +285,21 @@ class MayanProxyHandler(http.server.BaseHTTPRequestHandler):
                     if doc_id:
                         target['id'] = int(doc_id)
                         target['document_id'] = int(doc_id)
-                        target['document_type_id'] = int(obj_id) if obj_id is not None else None
                         changed = True
                         logger.info(f"Event {event_id}: Set id={doc_id} and document_id={doc_id} (from DB lookup, doc_type={obj_id})")
                     else:
                         target['document_id'] = None
-                        target['document_type_id'] = int(obj_id) if obj_id is not None else None
                         changed = True
                         logger.warning(f"Event {event_id}: Could not find document_id in DB for doc_type={obj_id}")
+                    # Add document_type for extraction: document_data.get('document_type', {}).get('label')
+                    doc_type_id = obj_id or target.get('document_type_id')
+                    if target.pop('document_type_id', None) is not None:
+                        changed = True
+                    if ('document_type' not in target or not isinstance(target.get('document_type'), dict)) and doc_type_id is not None:
+                        doc_type_label = _get_document_type_label(doc_type_id)
+                        if doc_type_label is not None:
+                            target['document_type'] = {'id': int(doc_type_id), 'label': doc_type_label}
+                            changed = True
                 
         return changed
 
