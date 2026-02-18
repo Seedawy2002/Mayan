@@ -127,11 +127,15 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
         rest_api_fields.DynamicSerializerField.to_representation = patched_to_representation
 
     def _patch_events_serializer(self):
-        """Patch base EventSerializer.target so deleted targets always return id."""
+        """Patch base EventSerializer.target so deleted targets always return id.
+        Also add action_object and action_object_content_type so cabinet events
+        (e.g. cabinets.add_document) include the cabinet id in the response."""
         try:
             from mayan.apps.events.serializers import event_serializers
         except ImportError:
             return
+        from mayan.apps.common.serializers import ContentTypeSerializer
+        from mayan.apps.rest_api.fields import DynamicSerializerField
         from events_document_id_fix.serializers import EventTargetField
 
         EventSerializer = event_serializers.EventSerializer
@@ -140,6 +144,18 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
         EventSerializer.target = custom_target
         if hasattr(EventSerializer, '_declared_fields') and 'target' in EventSerializer._declared_fields:
             EventSerializer._declared_fields['target'] = custom_target
+
+        # Add action_object and action_object_content_type (cabinet for cabinets.add_document)
+        EventSerializer.action_object = DynamicSerializerField(read_only=True)
+        EventSerializer.action_object_content_type = ContentTypeSerializer(read_only=True)
+        EventSerializer._declared_fields['action_object'] = EventSerializer.action_object
+        EventSerializer._declared_fields['action_object_content_type'] = EventSerializer.action_object_content_type
+        # Remove action_object_content_type from exclude (DRF forbids declaring a field that's also excluded)
+        if hasattr(EventSerializer.Meta, 'exclude') and EventSerializer.Meta.exclude:
+            EventSerializer.Meta.exclude = tuple(
+                f for f in EventSerializer.Meta.exclude
+                if f != 'action_object_content_type'
+            )
 
     def _connect_save_target_before_delete(self):
         """Connect signals to capture document metadata when a document record is about to be deleted."""
