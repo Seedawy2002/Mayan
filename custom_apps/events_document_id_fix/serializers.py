@@ -37,11 +37,66 @@ def _get_document_type_id_from_document(doc_id):
     except Exception:
         return None
 
+def _cabinet_stub_for_action_field(action, field_name):
+    """Return stub dict for actor/target/action_object when it's DeletedCabinetStub."""
+    try:
+        from events_document_id_fix.models import DeletedCabinetStub
+        from django.contrib.contenttypes.models import ContentType
+        if field_name == 'actor':
+            ct_id = getattr(action, 'actor_content_type_id', None)
+            obj_id = getattr(action, 'actor_object_id', None)
+        elif field_name == 'action_object':
+            ct_id = getattr(action, 'action_object_content_type_id', None)
+            obj_id = getattr(action, 'action_object_object_id', None)
+        else:
+            ct_id = getattr(action, 'target_content_type_id', None)
+            obj_id = getattr(action, 'target_object_id', None)
+        if ct_id is None or obj_id is None or obj_id == '':
+            return None
+        ct = ContentType.objects.get_for_id(ct_id)
+        app_label = getattr(ct, 'app_label', None)
+        model = getattr(ct, 'model', None)
+        stub = None
+        if app_label == 'events_document_id_fix' and model == 'deletedcabinetstub':
+            stub_pk = int(obj_id) if isinstance(obj_id, str) else obj_id
+            stub = DeletedCabinetStub.objects.filter(pk=stub_pk).first()
+        elif app_label == 'cabinets' and model == 'cabinet':
+            cabinet_id = int(obj_id) if isinstance(obj_id, str) else obj_id
+            stub = DeletedCabinetStub.objects.filter(cabinet_id=cabinet_id).order_by('-deleted_at').first()
+        if stub is None:
+            return None
+        return {
+            'id': stub.cabinet_id,
+            'stub_id': stub.pk,
+            'cabinet_id': stub.cabinet_id,
+            'label': stub.label,
+            'parent_id': stub.parent_id,
+            'full_path': stub.full_path,
+            'children': [],
+        }
+    except Exception:
+        return None
 
-def _get_document_type_label_from_document(doc_id):
-    """Look up document_type label from Document or TrashedDocument by document id. Returns str or None."""
-    doc_type_id = _get_document_type_id_from_document(doc_id)
-    return _get_document_type_label(doc_type_id) if doc_type_id is not None else None
+
+class CabinetStubField(DynamicSerializerField):
+    """Field that returns DeletedCabinetStub dict for cabinet_deleted events (actor/target/action_object)."""
+
+    def __init__(self, stub_field_name='actor', **kwargs):
+        self._stub_field_name = stub_field_name
+        super().__init__(**kwargs)
+
+    def get_attribute(self, instance):
+        """Return stub dict when actor/target/action_object is DeletedCabinetStub (avoids 'Unable to find serializer')."""
+        stub = _cabinet_stub_for_action_field(instance, self._stub_field_name)
+        if stub is not None:
+            return stub
+        return super().get_attribute(instance)
+
+    def to_representation(self, value):
+        """If value is already our stub dict, return it; otherwise delegate."""
+        if isinstance(value, dict) and 'id' in value and 'label' in value and 'parent_id' in value:
+            return value
+        return super().to_representation(value)
 
 
 class EventTargetField(DynamicSerializerField):
@@ -51,14 +106,65 @@ class EventTargetField(DynamicSerializerField):
     stored target_object_id and any metadata we saved before delete.
     """
 
+    def get_attribute(self, instance):
+        """Return stub dict when target is DeletedCabinetStub (avoids 'Unable to find serializer')."""
+        stub = _cabinet_stub_for_action_field(instance, 'target')
+        if stub is not None:
+            return stub
+        return super().get_attribute(instance)
+
+    def to_representation(self, value):
+        """If value is already our stub dict, return it; otherwise delegate."""
+        if isinstance(value, dict) and 'id' in value and 'label' in value and 'parent_id' in value:
+            return value
+        return super().to_representation(value)
+
+    def _cabinet_stub_result(self, action):
+        """Build stub dict for deleted cabinet from DeletedCabinetStub (target_object_id is cabinet_id or stub pk)."""
+        target_id = getattr(action, 'target_object_id', None) if action else None
+        if target_id is None:
+            return {'id': None, 'cabinet_id': None, 'label': None, 'parent_id': None, 'full_path': None, 'children': []}
+        try:
+            from events_document_id_fix.models import DeletedCabinetStub
+            target_app = getattr(getattr(action, 'target_content_type', None), 'app_label', None)
+            target_model = getattr(getattr(action, 'target_content_type', None), 'model', None)
+            stub = None
+            if target_app == 'events_document_id_fix' and target_model == 'deletedcabinetstub':
+                stub_pk = int(target_id) if isinstance(target_id, str) else target_id
+                stub = DeletedCabinetStub.objects.filter(pk=stub_pk).first()
+            else:
+                cabinet_id = int(target_id) if isinstance(target_id, str) else target_id
+                stub = DeletedCabinetStub.objects.filter(cabinet_id=cabinet_id).order_by('-deleted_at').first()
+            if stub is None:
+                cab_id = int(target_id) if isinstance(target_id, str) else target_id
+                return {'id': cab_id, 'cabinet_id': cab_id, 'label': None, 'parent_id': None, 'full_path': None, 'children': []}
+            return {
+                'id': stub.cabinet_id,
+                'stub_id': stub.pk,
+                'cabinet_id': stub.cabinet_id,
+                'label': stub.label,
+                'parent_id': stub.parent_id,
+                'full_path': stub.full_path,
+                'children': [],
+            }
+        except Exception:
+            cab_id = int(target_id) if isinstance(target_id, str) else target_id
+            return {'id': cab_id, 'cabinet_id': cab_id, 'label': None, 'parent_id': None, 'full_path': None, 'children': []}
+
     def _target_id_result(self, action):
         """Build target dict from event and TrashedDocumentDeletedInfo (true document_id)."""
         target_id = getattr(action, 'target_object_id', None) if action else None
         result = {'id': int(target_id) if target_id is not None else None}
         event_created = (getattr(action, 'timestamp', None) or getattr(action, 'created', None)) if action else None
         target_model = None
+        target_app = None
         if action and getattr(action, 'target_content_type', None):
             target_model = getattr(action.target_content_type, 'model', None)
+            target_app = getattr(action.target_content_type, 'app_label', None)
+
+        # Target is deleted cabinet (Cabinet or repointed DeletedCabinetStub) -> use DeletedCabinetStub.
+        if (target_app == 'cabinets' and target_model == 'cabinet') or (target_app == 'events_document_id_fix' and target_model == 'deletedcabinetstub'):
+            return self._cabinet_stub_result(action)
 
         # Target is Document -> target_object_id is document_id.
         if target_model == 'document':
@@ -112,11 +218,14 @@ class EventTargetField(DynamicSerializerField):
         return getattr(verb, 'id', None)
 
     def to_representation(self, value):
+        # If value is already our cabinet stub dict (from get_attribute), return it.
+        if isinstance(value, dict) and 'id' in value and 'label' in value and 'parent_id' in value:
+            return value
         action = self.parent.instance
         verb_id = self._verb_id(action)
 
-        # Only edit trashed_document_deleted events; leave all others to base behavior.
-        if verb_id == 'documents.trashed_document_deleted':
+        # For trashed_document_deleted and cabinet_deleted, use stub/target result when target is missing.
+        if verb_id in ('documents.trashed_document_deleted', 'cabinets.cabinet_deleted'):
             if value is None:
                 return self._target_id_result(action)
             if isinstance(value, str) and value.startswith('Unable to find serializer'):

@@ -30,6 +30,8 @@ services:
       - cache:/data
     networks:
       - mayan_network
+    ports:
+      - "6379:6379"
 
   mayan-app:
     image: mayanedms/mayanedms:s4.10
