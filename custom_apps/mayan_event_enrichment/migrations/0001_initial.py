@@ -25,11 +25,11 @@ class Migration(migrations.Migration):
             ],
             options={
                 'ordering': ('-created',),
-                'app_label': 'events_document_id_fix',
+                'app_label': 'mayan_event_enrichment',
             },
         ),
         migrations.AddConstraint(
             model_name='deletedtargetinfo',
-            constraint=models.UniqueConstraint(fields=('target_content_type', 'target_object_id'), name='events_document_id_fix_deletedtargetinfo_unique'),
+            constraint=models.UniqueConstraint(fields=('target_content_type', 'target_object_id'), name='mayan_event_enrichment_deletedtargetinfo_unique'),
         ),
     ]

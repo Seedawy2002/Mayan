@@ -7,13 +7,13 @@ import django.utils.timezone
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('events_document_id_fix', '0006_deletedcabinetstub'),
+        ('mayan_event_enrichment', '0006_deletedcabinetstub'),
     ]
 
     operations = [
         migrations.RemoveConstraint(
             model_name='trasheddocumentdeletedinfo',
-            name='events_document_id_fix_document_id_unique',
+            name='mayan_event_enrichment_document_id_unique',
         ),
         migrations.AlterField(
             model_name='deletedcabinetstub',

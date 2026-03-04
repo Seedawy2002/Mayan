@@ -8,12 +8,12 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('events_document_id_fix', '0001_initial'),
+        ('mayan_event_enrichment', '0001_initial'),
     ]
 
     operations = [
         migrations.RemoveConstraint(
             model_name='deletedtargetinfo',
-            name='events_document_id_fix_deletedtargetinfo_unique',
+            name='mayan_event_enrichment_deletedtargetinfo_unique',
         ),
     ]

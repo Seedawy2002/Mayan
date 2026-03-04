@@ -19,7 +19,7 @@ class TrashedDocumentDeletedInfo(models.Model):
     event_id = models.PositiveIntegerField(null=True, blank=True, db_index=True)
 
     class Meta:
-        app_label = 'events_document_id_fix'
+        app_label = 'mayan_event_enrichment'
         ordering = ('-deleted_at',)
 
     def __str__(self):
@@ -38,7 +38,7 @@ class DeletedCabinetStub(models.Model):
     deleted_at = models.DateTimeField(db_index=True, default=timezone.now)
 
     class Meta:
-        app_label = 'events_document_id_fix'
+        app_label = 'mayan_event_enrichment'
         ordering = ('-deleted_at',)
 
     def __str__(self):
@@ -62,7 +62,7 @@ class DeletedCabinetEvent(models.Model):
     action_object_object_id = models.CharField(max_length=255, null=True, blank=True)
 
     class Meta:
-        app_label = 'events_document_id_fix'
+        app_label = 'mayan_event_enrichment'
         ordering = ('-timestamp',)
 
     def __str__(self):

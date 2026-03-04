@@ -7,7 +7,7 @@ import django.utils.timezone
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('events_document_id_fix', '0007_remove_trasheddocumentdeletedinfo_events_document_id_fix_document_id_unique_and_more'),
+        ('mayan_event_enrichment', '0007_remove_trasheddocumentdeletedinfo_events_document_id_fix_document_id_unique_and_more'),
     ]
 
     operations = [
@@ -26,7 +26,7 @@ class Migration(migrations.Migration):
                 ('action_object_object_id', models.CharField(blank=True, max_length=255, null=True)),
             ],
             options={
-                'app_label': 'events_document_id_fix',
+                'app_label': 'mayan_event_enrichment',
                 'ordering': ('-timestamp',),
             },
         ),

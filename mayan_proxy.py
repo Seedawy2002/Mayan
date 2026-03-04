@@ -41,7 +41,7 @@ def _get_document_id_for_event(event_id):
         )
         cur = conn.cursor()
         cur.execute(
-            "SELECT document_id FROM events_document_id_fix_trasheddocumentdeletedinfo WHERE event_id = %s LIMIT 1",
+            "SELECT document_id FROM mayan_event_enrichment_trasheddocumentdeletedinfo WHERE event_id = %s LIMIT 1",
             (int(event_id),),
         )
         row = cur.fetchone()
@@ -306,13 +306,13 @@ class MayanProxyHandler(http.server.BaseHTTPRequestHandler):
 if __name__ == "__main__":
     socketserver.TCPServer.allow_reuse_address = True
     with socketserver.TCPServer(("", PORT), MayanProxyHandler) as httpd:
-        print(f"\n=======================================")
-        print(f"   MAYAN EVENT FIX PROXY STARTED")
-        print(f"=======================================")
-        print(f" Listening on: http://localhost:{PORT}")
-        print(f" Forwarding to: {TARGET_URL}")
-        print(f"=======================================\n")
+        logger.info("\n=======================================")
+        logger.info("   MAYAN EVENT ENRICHMENT PROXY STARTED")
+        logger.info("=======================================")
+        logger.info(f" Listening on: http://localhost:{PORT}")
+        logger.info(f" Forwarding to: {TARGET_URL}")
+        logger.info("=======================================\n")
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
-            print("\nProxy shutting down...")
+            logger.info("\nProxy shutting down...")

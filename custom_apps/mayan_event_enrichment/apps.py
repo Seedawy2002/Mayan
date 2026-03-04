@@ -4,11 +4,11 @@ from mayan.apps.common.apps import MayanAppConfig
 
 logger = logging.getLogger(__name__)
 
-class EventsDocumentIdFixConfig(MayanAppConfig):
+class MayanEventEnrichmentConfig(MayanAppConfig):
     has_rest_api = False
     has_tests = False
-    name = 'events_document_id_fix'
-    verbose_name = _('Events document ID fix')
+    name = 'mayan_event_enrichment'
+    verbose_name = _('Mayan Event Enrichment')
 
     def ready(self):
         super().ready()
@@ -25,7 +25,7 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
             try:
                 fn()
             except Exception:
-                logger.exception('events_document_id_fix: %s failed', getattr(fn, '__name__', str(fn)))
+                logger.exception('mayan_event_enrichment: %s failed', getattr(fn, '__name__', str(fn)))
 
     def _ensure_cabinet_deleted_event_type(self):
         """Register cabinets.cabinet_deleted at load time so EventTypeSerializer can resolve it."""
@@ -45,7 +45,7 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
     def capture_deletion_metadata(self, document_instance):
         """Create TrashedDocumentDeletedInfo row for a document before it's deleted."""
         try:
-            from events_document_id_fix.models import TrashedDocumentDeletedInfo
+            from mayan_event_enrichment.models import TrashedDocumentDeletedInfo
             from django.utils import timezone
 
             doc_type_id = getattr(document_instance, 'document_type_id', None) or (
@@ -70,7 +70,7 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
     def _resolve_doc_id_for_documenttype_target(self, action, target_obj_id):
         """Look up document_id from TrashedDocumentDeletedInfo for documenttype target."""
         try:
-            from events_document_id_fix.models import TrashedDocumentDeletedInfo
+            from mayan_event_enrichment.models import TrashedDocumentDeletedInfo
             event_id = getattr(action, 'pk', None) or getattr(action, 'id', None)
             event_created = getattr(action, 'timestamp', None) or getattr(action, 'created', None)
             doc_type_id = int(target_obj_id)
@@ -111,7 +111,7 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
         def _cabinet_stub_for_field(instance, field_name):
             """Return stub dict for deleted cabinet from DeletedCabinetStub (cabinet or stub content type)."""
             try:
-                from events_document_id_fix.models import DeletedCabinetStub
+                from mayan_event_enrichment.models import DeletedCabinetStub
                 from django.contrib.contenttypes.models import ContentType
                 ct_id = None
                 obj_id = None
@@ -130,7 +130,7 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
                 app_label = getattr(ct, 'app_label', None)
                 model = getattr(ct, 'model', None)
                 stub = None
-                if app_label == 'events_document_id_fix' and model == 'deletedcabinetstub':
+                if app_label == 'mayan_event_enrichment' and model == 'deletedcabinetstub':
                     stub_pk = int(obj_id) if isinstance(obj_id, str) else obj_id
                     stub = DeletedCabinetStub.objects.filter(pk=stub_pk).first()
                 elif app_label == 'cabinets' and model == 'cabinet':
@@ -213,7 +213,7 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
             return
         from mayan.apps.common.serializers import ContentTypeSerializer
         from mayan.apps.rest_api.fields import DynamicSerializerField
-        from events_document_id_fix.serializers import EventTargetField, CabinetStubField
+        from mayan_event_enrichment.serializers import EventTargetField, CabinetStubField
 
         EventSerializer = event_serializers.EventSerializer
         custom_target = EventTargetField(read_only=True)
@@ -257,9 +257,9 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
                 try:
                     if not ct or obj_id in (None, ''):
                         return None
-                    if getattr(ct, 'app_label', None) != 'events_document_id_fix' or getattr(ct, 'model', None) != 'deletedcabinetstub':
+                    if getattr(ct, 'app_label', None) != 'mayan_event_enrichment' or getattr(ct, 'model', None) != 'deletedcabinetstub':
                         return None
-                    from events_document_id_fix.models import DeletedCabinetStub
+                    from mayan_event_enrichment.models import DeletedCabinetStub
                     stub = DeletedCabinetStub.objects.filter(pk=int(obj_id)).first()
                     return str(stub.cabinet_id) if stub else None
                 except Exception:
@@ -308,7 +308,7 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
             return
 
         def _cabinet_deleted_actions_queryset():
-            from events_document_id_fix.models import DeletedCabinetStub
+            from mayan_event_enrichment.models import DeletedCabinetStub
             from django.contrib.contenttypes.models import ContentType
             from django.db.models import Q
             cabinet_ct = ContentType.objects.filter(app_label='cabinets', model='cabinet').first()
@@ -392,7 +392,7 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
 
         def patched_list(self_view, request, *args, **kwargs):
             from rest_framework.response import Response
-            from events_document_id_fix.models import DeletedCabinetEvent
+            from mayan_event_enrichment.models import DeletedCabinetEvent
             try:
                 queryset = self_view.filter_queryset(self_view.get_queryset())
                 # Preserve Mayan's normal ordering (including `?_ordering=` via MayanSortingFilter).
@@ -446,7 +446,7 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
                 return Response(serializer.data)
             except Exception as e:
                 logger.exception(
-                    'events_document_id_fix: patched_list failed, falling back to original: %s', e
+                    'mayan_event_enrichment: patched_list failed, falling back to original: %s', e
                 )
                 return _original_list(self_view, request, *args, **kwargs)
         APIEventListView.list = patched_list
@@ -541,7 +541,7 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
                     return None
 
             try:
-                from events_document_id_fix.models import DeletedCabinetStub
+                from mayan_event_enrichment.models import DeletedCabinetStub
                 full_path = _compute_full_path(instance) or getattr(instance, 'get_full_path', lambda: None)()
                 DeletedCabinetStub.objects.update_or_create(
                     cabinet_id=instance.pk,
@@ -567,12 +567,12 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
             """Create actstream Action row - references DeletedCabinetStub so it survives cabinet delete."""
             try:
                 from actstream.models import Action
-                from events_document_id_fix.models import DeletedCabinetStub
+                from mayan_event_enrichment.models import DeletedCabinetStub, DeletedCabinetEvent
                 from django.contrib.contenttypes.models import ContentType
                 cabinet_ct = ContentType.objects.filter(app_label='cabinets', model='cabinet').first()
                 stub = DeletedCabinetStub.objects.filter(cabinet_id=cabinet_id).order_by('-deleted_at').first()
                 if not cabinet_ct or not stub:
-                    logger.warning('events_document_id_fix: no stub for cabinet_id=%s', cabinet_id)
+                    logger.warning('mayan_event_enrichment: no stub for cabinet_id=%s', cabinet_id)
                     return
                 stub_ct = ContentType.objects.get_for_model(DeletedCabinetStub)
                 stub_id_str = str(stub.pk)
@@ -599,17 +599,17 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
                     action_object_object_id=action_obj_id or '',
                     public=True,
                 )
-                logger.info('events_document_id_fix: cabinet_deleted Action created for cabinet_id=%s', cabinet_id)
+                logger.info('mayan_event_enrichment: cabinet_deleted Action created for cabinet_id=%s', cabinet_id)
             except Exception as e:
                 logger.exception(
-                    'events_document_id_fix: failed to create cabinet_deleted Action for cabinet_id=%s: %s',
+                    'mayan_event_enrichment: failed to create cabinet_deleted Action for cabinet_id=%s: %s',
                     cabinet_id, e,
                 )
 
         def _copy_single_action_to_deleted_event(action, cabinet_instance):
             """Copy one cabinet_deleted action to DeletedCabinetEvent (for the one we just created)."""
             try:
-                from events_document_id_fix.models import DeletedCabinetStub, DeletedCabinetEvent
+                from mayan_event_enrichment.models import DeletedCabinetStub, DeletedCabinetEvent
                 from django.contrib.contenttypes.models import ContentType
                 cabinet_ct = ContentType.objects.filter(app_label='cabinets', model='cabinet').first()
                 stub = DeletedCabinetStub.objects.filter(cabinet_id=cabinet_instance.pk).order_by('-deleted_at').first()
@@ -646,7 +646,7 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
             """Copy cabinet_deleted actions that reference this cabinet to DeletedCabinetEvent (so they survive cascade delete)."""
             try:
                 from actstream.models import Action
-                from events_document_id_fix.models import DeletedCabinetStub, DeletedCabinetEvent
+                from mayan_event_enrichment.models import DeletedCabinetStub, DeletedCabinetEvent
                 from django.contrib.contenttypes.models import ContentType
                 cabinet_ct = ContentType.objects.filter(app_label='cabinets', model='cabinet').first()
                 if not cabinet_ct:
@@ -694,7 +694,7 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
             """Repoint all cabinet_deleted actions that reference this cabinet to DeletedCabinetStub."""
             try:
                 from actstream.models import Action
-                from events_document_id_fix.models import DeletedCabinetStub
+                from mayan_event_enrichment.models import DeletedCabinetStub
                 from django.contrib.contenttypes.models import ContentType
                 cabinet_ct = ContentType.objects.filter(app_label='cabinets', model='cabinet').first()
                 if not cabinet_ct:
@@ -719,7 +719,7 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
         def _repoint_action_to_stub(action, cabinet_instance):
             """Set actor/target/action_object to DeletedCabinetStub so Action isn't cascade-deleted."""
             try:
-                from events_document_id_fix.models import DeletedCabinetStub
+                from mayan_event_enrichment.models import DeletedCabinetStub
                 from django.contrib.contenttypes.models import ContentType
                 stub = DeletedCabinetStub.objects.filter(cabinet_id=cabinet_instance.pk).order_by('-deleted_at').first()
                 if not stub:
@@ -843,7 +843,7 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
                 if captured:
                     doc_id, doc_type_id, label = captured
                     try:
-                        from events_document_id_fix.models import TrashedDocumentDeletedInfo
+                        from mayan_event_enrichment.models import TrashedDocumentDeletedInfo
                         from django.utils import timezone
                         TrashedDocumentDeletedInfo.objects.get_or_create(
                             document_id=doc_id,
@@ -876,7 +876,7 @@ class EventsDocumentIdFixConfig(MayanAppConfig):
             if target_obj_id is None:
                 return
             try:
-                from events_document_id_fix.models import TrashedDocumentDeletedInfo
+                from mayan_event_enrichment.models import TrashedDocumentDeletedInfo
                 from django.contrib.contenttypes.models import ContentType
                 doc_type_ct = ContentType.objects.get(app_label='documents', model='documenttype')
                 if getattr(instance, 'target_content_type_id', None) != doc_type_ct.pk:

@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('events_document_id_fix', '0004_trasheddocumentdeletedinfo_event_id'),
+        ('mayan_event_enrichment', '0004_trasheddocumentdeletedinfo_event_id'),
     ]
 
     operations = [
@@ -14,7 +14,7 @@ class Migration(migrations.Migration):
             model_name='trasheddocumentdeletedinfo',
             constraint=models.UniqueConstraint(
                 fields=('document_id',),
-                name='events_document_id_fix_document_id_unique'
+                name='mayan_event_enrichment_document_id_unique'
             ),
         ),
     ]

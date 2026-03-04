@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('events_document_id_fix', '0003_trashed_document_deleted_info'),
+        ('mayan_event_enrichment', '0003_trashed_document_deleted_info'),
     ]
 
     operations = [

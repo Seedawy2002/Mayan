@@ -62,7 +62,7 @@ services:
       - "8070:8000"
     volumes:
       - mayan_app:/var/lib/mayan
-      - ./custom_apps/events_document_id_fix:/var/lib/mayan/events_document_id_fix
+      - ./custom_apps/mayan_event_enrichment:/var/lib/mayan/mayan_event_enrichment
       - ./local_settings.py:/var/lib/mayan/local_settings.py
     restart: unless-stopped
     networks:

@@ -40,7 +40,7 @@ def _get_document_type_id_from_document(doc_id):
 def _cabinet_stub_for_action_field(action, field_name):
     """Return stub dict for actor/target/action_object when it's DeletedCabinetStub."""
     try:
-        from events_document_id_fix.models import DeletedCabinetStub
+        from mayan_event_enrichment.models import DeletedCabinetStub
         from django.contrib.contenttypes.models import ContentType
         if field_name == 'actor':
             ct_id = getattr(action, 'actor_content_type_id', None)
@@ -57,7 +57,7 @@ def _cabinet_stub_for_action_field(action, field_name):
         app_label = getattr(ct, 'app_label', None)
         model = getattr(ct, 'model', None)
         stub = None
-        if app_label == 'events_document_id_fix' and model == 'deletedcabinetstub':
+        if app_label == 'mayan_event_enrichment' and model == 'deletedcabinetstub':
             stub_pk = int(obj_id) if isinstance(obj_id, str) else obj_id
             stub = DeletedCabinetStub.objects.filter(pk=stub_pk).first()
         elif app_label == 'cabinets' and model == 'cabinet':
@@ -125,11 +125,11 @@ class EventTargetField(DynamicSerializerField):
         if target_id is None:
             return {'id': None, 'cabinet_id': None, 'label': None, 'parent_id': None, 'full_path': None, 'children': []}
         try:
-            from events_document_id_fix.models import DeletedCabinetStub
+            from mayan_event_enrichment.models import DeletedCabinetStub
             target_app = getattr(getattr(action, 'target_content_type', None), 'app_label', None)
             target_model = getattr(getattr(action, 'target_content_type', None), 'model', None)
             stub = None
-            if target_app == 'events_document_id_fix' and target_model == 'deletedcabinetstub':
+            if target_app == 'mayan_event_enrichment' and target_model == 'deletedcabinetstub':
                 stub_pk = int(target_id) if isinstance(target_id, str) else target_id
                 stub = DeletedCabinetStub.objects.filter(pk=stub_pk).first()
             else:
@@ -163,7 +163,7 @@ class EventTargetField(DynamicSerializerField):
             target_app = getattr(action.target_content_type, 'app_label', None)
 
         # Target is deleted cabinet (Cabinet or repointed DeletedCabinetStub) -> use DeletedCabinetStub.
-        if (target_app == 'cabinets' and target_model == 'cabinet') or (target_app == 'events_document_id_fix' and target_model == 'deletedcabinetstub'):
+        if (target_app == 'cabinets' and target_model == 'cabinet') or (target_app == 'mayan_event_enrichment' and target_model == 'deletedcabinetstub'):
             return self._cabinet_stub_result(action)
 
         # Target is Document -> target_object_id is document_id.
@@ -182,7 +182,7 @@ class EventTargetField(DynamicSerializerField):
             if doc_type_label is not None:
                 result['document_type'] = {'id': int(target_id), 'label': doc_type_label}
             try:
-                from events_document_id_fix.models import TrashedDocumentDeletedInfo
+                from mayan_event_enrichment.models import TrashedDocumentDeletedInfo
                 event_id = getattr(action, 'pk', None) or getattr(action, 'id', None)
                 row = None
                 if event_id is not None:

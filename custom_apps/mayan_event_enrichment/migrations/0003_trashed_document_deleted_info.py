@@ -7,7 +7,7 @@ from django.utils import timezone
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('events_document_id_fix', '0002_remove_unique_for_document_type_lookup'),
+        ('mayan_event_enrichment', '0002_remove_unique_for_document_type_lookup'),
     ]
 
     operations = [
@@ -22,7 +22,7 @@ class Migration(migrations.Migration):
             ],
             options={
                 'ordering': ('-deleted_at',),
-                'app_label': 'events_document_id_fix',
+                'app_label': 'mayan_event_enrichment',
             },
         ),
         migrations.DeleteModel(

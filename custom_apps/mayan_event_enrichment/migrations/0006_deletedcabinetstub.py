@@ -10,7 +10,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('events_document_id_fix', '0005_document_id_unique'),
+        ('mayan_event_enrichment', '0005_document_id_unique'),
     ]
 
     operations = [
@@ -25,7 +25,7 @@ class Migration(migrations.Migration):
                 ('deleted_at', models.DateTimeField(db_index=True)),
             ],
             options={
-                'app_label': 'events_document_id_fix',
+                'app_label': 'mayan_event_enrichment',
                 'ordering': ('-deleted_at',),
             },
         ),
